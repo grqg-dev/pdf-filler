@@ -1,73 +1,84 @@
-# React + TypeScript + Vite
+# PDF Form Filler
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A fast, polished, browser-based PDF form filler. Upload any PDF, click anywhere to add text or checkbox annotations, then download a flattened PDF with your annotations baked in. Everything runs client-side — no server required.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **Upload PDFs** via drag-and-drop or file picker
+- **Text annotations** with adjustable font size
+- **Checkbox annotations** for yes/no fields
+- **Click to place**, **drag to move**
+- **Two-click delete** with a clear confirm state
+- **Keyboard shortcuts**: `Delete`/`Backspace` to remove selected, `Esc` to deselect
+- **Zoom** in and out
+- **Export** a flattened PDF that looks exactly like the editor
 
-## React Compiler
+## Tech stack
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- [Vite 8](https://vitejs.dev/) + [React 19](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/)
+- [Tailwind CSS v4](https://tailwindcss.com/)
+- [pdfjs-dist](https://github.com/mozilla/pdf.js) for PDF rendering
+- [html2canvas](https://html2canvas.hertzen.com/) for rasterizing annotations
+- [jsPDF](https://github.com/parallax/jsPDF) for generating the output PDF
+- [Zustand](https://github.com/pmndrs/zustand) for state management
 
-## Expanding the ESLint configuration
+## Getting started
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Then open http://localhost:5173 in your browser.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Usage
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+1. Drop a PDF onto the upload area or click to browse.
+2. Select the **Text** tool and click anywhere on the page to add a text field. Start typing immediately.
+3. Use the font-size picker under the Text tool to change the size of the selected or newly created text annotation.
+4. Select the **Check** tool and click to drop a checkbox. Click the checkbox to toggle it.
+5. Drag annotations to reposition them.
+6. Hover an annotation and click the trash icon, then confirm, to delete it.
+7. Click **Export** to download the flattened PDF.
+
+## Development
+
+```bash
+npm run dev      # start dev server
+npm run build    # production build
+npm run lint     # ESLint
+npm run preview  # preview production build
 ```
+
+## Project structure
+
+```
+src/
+├── components/        # React components
+│   ├── annotations/   # TextAnnotation, CheckboxAnnotation, DeleteButton, AnnotationLayer
+│   ├── layout/        # AppLayout, Header, Sidebar, ToolbarButton
+│   ├── upload/        # PdfUploader
+│   └── viewer/        # PdfViewer, PageRenderer, PageCanvas, PageErrorBoundary
+├── hooks/             # Custom React hooks
+├── store/             # Zustand stores
+├── utils/             # Helpers and PDF export logic
+├── types/             # Shared TypeScript types
+└── workers/           # pdf.js worker entry
+```
+
+## How it works
+
+- PDF pages are rendered to `<canvas>` elements via `pdfjs-dist`.
+- An absolutely-positioned HTML overlay sits on top of each page and holds the annotations.
+- Annotation positions are stored in CSS pixels relative to the rendered page, so the UI and export share the same coordinate system.
+- On export, each page is composited from the rendered canvas plus a rasterized snapshot of the annotation overlay, then written to a new PDF with `jsPDF`.
+
+## Notes
+
+- The exported PDF is rasterized (image-based), not text-selectable.
+- Existing PDF form fields are **not** auto-detected; annotations are placed manually.
+- Large PDFs with many pages will take longer to export because every page is rasterized.
+
+## License
+
+MIT
