@@ -15,7 +15,7 @@ interface UsePdfDocumentResult {
   error: Error | null;
 }
 
-export function usePdfDocument(file: File): UsePdfDocumentResult {
+export function usePdfDocument(source: File | string): UsePdfDocumentResult {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [numPages, setNumPages] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
@@ -23,7 +23,13 @@ export function usePdfDocument(file: File): UsePdfDocumentResult {
 
   useEffect(() => {
     let cancelled = false;
-    const url = URL.createObjectURL(file);
+    let objectUrl: string | null = null;
+
+    const url =
+      typeof source === "string"
+        ? source
+        : (objectUrl = URL.createObjectURL(source));
+
     const loadingTask = pdfjs.getDocument({ url });
 
     setIsLoading(true);
@@ -31,7 +37,7 @@ export function usePdfDocument(file: File): UsePdfDocumentResult {
 
     loadingTask.promise
       .then((loadedDoc) => {
-        URL.revokeObjectURL(url);
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
         if (cancelled) {
           (loadedDoc as unknown as { destroy: () => void }).destroy();
           return;
@@ -41,7 +47,7 @@ export function usePdfDocument(file: File): UsePdfDocumentResult {
         setIsLoading(false);
       })
       .catch((err) => {
-        URL.revokeObjectURL(url);
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
         if (cancelled) return;
         setError(
           err instanceof Error ? err : new Error("Failed to load PDF")
@@ -53,7 +59,7 @@ export function usePdfDocument(file: File): UsePdfDocumentResult {
       cancelled = true;
       loadingTask.destroy();
     };
-  }, [file]);
+  }, [source]);
 
   return { doc, numPages, isLoading, error };
 }

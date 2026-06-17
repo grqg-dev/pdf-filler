@@ -5,7 +5,7 @@ interface AppState {
   tool: Tool;
   scale: number;
   textFontSize: number;
-  pdfFile: File | null;
+  pdfSource: File | string | null;
   selectedId: string | null;
   isExporting: boolean;
 
@@ -14,7 +14,7 @@ interface AppState {
   setTextFontSize: (size: number) => void;
   zoomIn: () => void;
   zoomOut: () => void;
-  setPdfFile: (file: File | null) => void;
+  setPdfSource: (source: File | string | null) => void;
   selectAnnotation: (id: string | null) => void;
   setIsExporting: (isExporting: boolean) => void;
   reset: () => void;
@@ -24,7 +24,7 @@ const initialState = {
   tool: "select" as Tool,
   scale: 1.5,
   textFontSize: 16,
-  pdfFile: null as File | null,
+  pdfSource: null as File | string | null,
   selectedId: null as string | null,
   isExporting: false,
 };
@@ -48,7 +48,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ scale: Math.max(scale - 0.25, 0.5) });
   },
 
-  setPdfFile: (pdfFile) => set({ pdfFile }),
+  setPdfSource: (pdfSource) => set({ pdfSource }),
 
   selectAnnotation: (id) => set({ selectedId: id }),
 

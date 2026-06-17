@@ -34,7 +34,7 @@ export function Sidebar({ onExport, isExporting }: SidebarProps) {
   const setTool = useAppStore((state) => state.setTool);
   const zoomIn = useAppStore((state) => state.zoomIn);
   const zoomOut = useAppStore((state) => state.zoomOut);
-  const setPdfFile = useAppStore((state) => state.setPdfFile);
+  const setPdfSource = useAppStore((state) => state.setPdfSource);
   const resetApp = useAppStore((state) => state.reset);
   const resetAnnotations = useAnnotationStore((state) => state.reset);
   const updateAnnotation = useAnnotationStore(
@@ -71,7 +71,7 @@ export function Sidebar({ onExport, isExporting }: SidebarProps) {
   const handleUploadNew = () => {
     resetApp();
     resetAnnotations();
-    setPdfFile(null);
+    setPdfSource(null);
   };
 
   return (

@@ -8,20 +8,29 @@ import { AppLayout } from "../layout/AppLayout";
 import { Header } from "../layout/Header";
 
 interface PdfViewerProps {
-  file: File;
+  source: File | string;
 }
 
-export function PdfViewer({ file }: PdfViewerProps) {
+function getDisplayName(source: File | string): string {
+  if (typeof source === "string") {
+    return source.split("/").pop()?.split("?")[0] ?? "document.pdf";
+  }
+  return source.name;
+}
+
+export function PdfViewer({ source }: PdfViewerProps) {
   const scale = useAppStore((state) => state.scale);
-  const { doc, numPages, isLoading, error } = usePdfDocument(file);
+  const { doc, numPages, isLoading, error } = usePdfDocument(source);
   const { exportPdf, isExporting, registerPageRef } = useExportPdf();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   useKeyboardShortcuts();
 
+  const displayName = getDisplayName(source);
+
   return (
     <AppLayout onExport={exportPdf} isExporting={isExporting}>
-      <Header fileName={file.name} numPages={numPages} />
+      <Header fileName={displayName} numPages={numPages} />
       <div
         ref={scrollContainerRef}
         className="flex-1 overflow-y-auto bg-slate-100"
@@ -38,6 +47,12 @@ export function PdfViewer({ file }: PdfViewerProps) {
             <div className="max-w-md w-full bg-red-50 rounded-xl p-6 text-center">
               <p className="text-red-600 font-medium mb-1">Failed to load PDF</p>
               <p className="text-red-500 text-sm">{error.message}</p>
+              {typeof source === "string" && (
+                <p className="text-red-400 text-xs mt-2">
+                  Make sure the URL is publicly accessible and the server allows
+                  cross-origin requests (CORS).
+                </p>
+              )}
             </div>
           </div>
         )}

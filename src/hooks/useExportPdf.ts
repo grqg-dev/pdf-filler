@@ -20,7 +20,7 @@ interface UseExportPdfResult {
 export function useExportPdf(): UseExportPdfResult {
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<Error | null>(null);
-  const pdfFile = useAppStore((state) => state.pdfFile);
+  const pdfSource = useAppStore((state) => state.pdfSource);
   const setIsExportingGlobal = useAppStore((state) => state.setIsExporting);
 
   const pageRefs = useRef<Map<number, ExportPageRef>>(new Map());
@@ -37,7 +37,7 @@ export function useExportPdf(): UseExportPdfResult {
   );
 
   const exportPdf = useCallback(async () => {
-    if (!pdfFile) return;
+    if (!pdfSource) return;
 
     setIsExporting(true);
     setExportError(null);
@@ -60,7 +60,11 @@ export function useExportPdf(): UseExportPdfResult {
         throw new Error("No pages available to export");
       }
 
-      const baseName = pdfFile.name.replace(/\.pdf$/i, "") || "filled";
+      const rawName =
+        typeof pdfSource === "string"
+          ? (pdfSource.split("/").pop()?.split("?")[0] ?? "document.pdf")
+          : pdfSource.name;
+      const baseName = rawName.replace(/\.pdf$/i, "") || "filled";
       await exportToPdf(pages, `${baseName}-filled.pdf`);
     } catch (err) {
       setExportError(
@@ -70,7 +74,7 @@ export function useExportPdf(): UseExportPdfResult {
       setIsExporting(false);
       setIsExportingGlobal(false);
     }
-  }, [pdfFile, setIsExportingGlobal]);
+  }, [pdfSource, setIsExportingGlobal]);
 
   return { exportPdf, isExporting, exportError, registerPageRef };
 }
