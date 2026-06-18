@@ -6,6 +6,8 @@ import {
   ZoomOut,
   Download,
   Upload,
+  PenTool,
+  Send,
 } from "lucide-react";
 import { useAppStore } from "../../store/useAppStore";
 import { useAnnotationStore } from "../../store/useAnnotationStore";
@@ -15,17 +17,20 @@ import type { Tool } from "../../types";
 interface SidebarProps {
   onExport: () => void;
   isExporting: boolean;
+  onFax?: () => void;
+  isFaxing?: boolean;
 }
 
 const TOOLS: { id: Tool; label: string; icon: typeof MousePointer }[] = [
   { id: "select", label: "Select", icon: MousePointer },
   { id: "text", label: "Text", icon: Type },
   { id: "checkbox", label: "Check", icon: CheckSquare },
+  { id: "image", label: "Sign", icon: PenTool },
 ];
 
 const FONT_SIZES = [10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40];
 
-export function Sidebar({ onExport, isExporting }: SidebarProps) {
+export function Sidebar({ onExport, isExporting, onFax, isFaxing }: SidebarProps) {
   const tool = useAppStore((state) => state.tool);
   const scale = useAppStore((state) => state.scale);
   const textFontSize = useAppStore((state) => state.textFontSize);
@@ -130,13 +135,21 @@ export function Sidebar({ onExport, isExporting }: SidebarProps) {
           icon={Download}
           label="Export"
           onClick={onExport}
-          disabled={isExporting}
+          disabled={isExporting || isFaxing}
         />
+        {onFax && (
+          <ToolbarButton
+            icon={Send}
+            label="Fax"
+            onClick={onFax}
+            disabled={isExporting || isFaxing}
+          />
+        )}
         <ToolbarButton
           icon={Upload}
           label="New"
           onClick={handleUploadNew}
-          disabled={isExporting}
+          disabled={isExporting || isFaxing}
         />
       </div>
     </aside>

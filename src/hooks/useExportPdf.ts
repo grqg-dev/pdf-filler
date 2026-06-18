@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { useAppStore } from "../store/useAppStore";
-import { exportToPdf, type ExportPageData } from "../utils/pdfExport";
+import { exportToPdf, exportToBlob, type ExportPageData } from "../utils/pdfExport";
 
 export interface ExportPageRef {
   pageIndex: number;
@@ -12,6 +12,7 @@ export interface ExportPageRef {
 
 interface UseExportPdfResult {
   exportPdf: () => Promise<void>;
+  exportBlob: () => Promise<Blob>;
   isExporting: boolean;
   exportError: Error | null;
   registerPageRef: (pageIndex: number, ref: ExportPageRef | null) => void;
@@ -76,5 +77,16 @@ export function useExportPdf(): UseExportPdfResult {
     }
   }, [pdfSource, setIsExportingGlobal]);
 
-  return { exportPdf, isExporting, exportError, registerPageRef };
+  const exportBlob = useCallback(async (): Promise<Blob> => {
+    const pages: ExportPageData[] = [];
+    const sortedIndexes = Array.from(pageRefs.current.keys()).sort((a, b) => a - b);
+    for (const pageIndex of sortedIndexes) {
+      const ref = pageRefs.current.get(pageIndex);
+      if (ref) pages.push(ref);
+    }
+    if (pages.length === 0) throw new Error("No pages available to export");
+    return exportToBlob(pages);
+  }, []);
+
+  return { exportPdf, exportBlob, isExporting, exportError, registerPageRef };
 }

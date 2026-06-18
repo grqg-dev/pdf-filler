@@ -13,7 +13,8 @@ import {
   MIN_ANNOTATION_HEIGHT,
 } from "../utils/constants";
 import { constrainRectToBounds } from "../utils/geometry";
-import type { Annotation, TextAnnotation, CheckboxAnnotation } from "../types";
+import type { Annotation, TextAnnotation, CheckboxAnnotation, ImageAnnotation } from "../types";
+import signaturePlaceholder from "../assets/signature-placeholder.png";
 
 interface AddTextOptions {
   pageIndex: number;
@@ -24,6 +25,14 @@ interface AddTextOptions {
 }
 
 interface AddCheckboxOptions {
+  pageIndex: number;
+  x: number;
+  y: number;
+  pageWidth: number;
+  pageHeight: number;
+}
+
+interface AddImageOptions {
   pageIndex: number;
   x: number;
   y: number;
@@ -91,6 +100,38 @@ export function useAnnotationActions() {
         pageIndex,
         ...rect,
         checked: false,
+      };
+
+      addAnnotation(annotation);
+      selectAnnotation(annotation.id);
+      return annotation.id;
+    },
+    [addAnnotation, selectAnnotation]
+  );
+
+  const addImageAnnotation = useCallback(
+    ({ pageIndex, x, y, pageWidth, pageHeight }: AddImageOptions) => {
+      const defaultWidth = 160;
+      const defaultHeight = 60;
+      const rect = constrainRectToBounds(
+        {
+          x: x - defaultWidth / 2,
+          y: y - defaultHeight / 2,
+          width: defaultWidth,
+          height: defaultHeight,
+        },
+        pageWidth,
+        pageHeight,
+        MIN_ANNOTATION_WIDTH,
+        MIN_ANNOTATION_HEIGHT
+      );
+
+      const annotation: ImageAnnotation = {
+        id: uuid(),
+        type: "image",
+        pageIndex,
+        ...rect,
+        src: signaturePlaceholder,
       };
 
       addAnnotation(annotation);
@@ -183,6 +224,7 @@ export function useAnnotationActions() {
   return {
     addTextAnnotation,
     addCheckboxAnnotation,
+    addImageAnnotation,
     moveAnnotation,
     resizeAnnotation,
     setTextValue,

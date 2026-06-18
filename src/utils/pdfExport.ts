@@ -48,6 +48,42 @@ export async function exportToPdf(
   doc.save(fileName);
 }
 
+export async function exportToBlob(pages: ExportPageData[]): Promise<Blob> {
+  if (pages.length === 0) {
+    throw new Error("No pages to export");
+  }
+
+  const doc = new jsPDF({
+    unit: "pt",
+    format: [pages[0].widthPts, pages[0].heightPts],
+    compress: true,
+  });
+
+  for (let i = 0; i < pages.length; i++) {
+    const page = pages[i];
+
+    if (i > 0) {
+      doc.addPage([page.widthPts, page.heightPts]);
+    }
+
+    const compositeCanvas = await compositePage(page);
+    const imgData = compositeCanvas.toDataURL("image/png");
+
+    doc.addImage(
+      imgData,
+      "PNG",
+      0,
+      0,
+      page.widthPts,
+      page.heightPts,
+      undefined,
+      "FAST"
+    );
+  }
+
+  return doc.output("blob");
+}
+
 async function compositePage(page: ExportPageData): Promise<HTMLCanvasElement> {
   const dpr = window.devicePixelRatio || 1;
   const cssWidth = page.canvas.width / dpr;

@@ -82,10 +82,10 @@ export function PdfUploader({ onSourceSelect }: PdfUploaderProps) {
           <FileText className="w-6 h-6 text-white" />
         </div>
         <h1 className="text-4xl font-semibold text-slate-800 mb-3 tracking-tight">
-          PDF Form Filler
+          Fill &amp; Fax
         </h1>
         <p className="text-slate-500 text-lg leading-relaxed">
-          Add text and checkboxes anywhere on a PDF, then download the filled result.
+          Add text, checkboxes, and signatures anywhere on a PDF, then fax or download the result.
         </p>
       </div>
 

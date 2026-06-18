@@ -1,6 +1,6 @@
-export type Tool = "select" | "text" | "checkbox";
+export type Tool = "select" | "text" | "checkbox" | "image";
 
-export type AnnotationType = "text" | "checkbox";
+export type AnnotationType = "text" | "checkbox" | "image";
 
 export interface BaseAnnotation {
   id: string;
@@ -23,7 +23,12 @@ export interface CheckboxAnnotation extends BaseAnnotation {
   checked: boolean;
 }
 
-export type Annotation = TextAnnotation | CheckboxAnnotation;
+export interface ImageAnnotation extends BaseAnnotation {
+  type: "image";
+  src: string;
+}
+
+export type Annotation = TextAnnotation | CheckboxAnnotation | ImageAnnotation;
 
 export interface Rect {
   x: number;

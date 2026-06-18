@@ -6,6 +6,7 @@ import {
 } from "../../hooks/useAnnotationActions";
 import { TextAnnotation } from "./TextAnnotation";
 import { CheckboxAnnotation } from "./CheckboxAnnotation";
+import { ImageAnnotation } from "./ImageAnnotation";
 import { getRelativeMousePosition } from "../../utils/geometry";
 import type { Annotation } from "../../types";
 
@@ -25,7 +26,9 @@ export const AnnotationLayer = forwardRef<HTMLDivElement, AnnotationLayerProps>(
     const {
       addTextAnnotation,
       addCheckboxAnnotation,
+      addImageAnnotation,
       moveAnnotation,
+      resizeAnnotation,
       setTextValue,
       toggleCheckbox,
       removeAnnotation,
@@ -58,6 +61,14 @@ export const AnnotationLayer = forwardRef<HTMLDivElement, AnnotationLayerProps>(
             pageWidth,
             pageHeight,
           });
+        } else if (tool === "image") {
+          addImageAnnotation({
+            pageIndex,
+            x: pos.x,
+            y: pos.y,
+            pageWidth,
+            pageHeight,
+          });
         }
       },
       [
@@ -67,6 +78,7 @@ export const AnnotationLayer = forwardRef<HTMLDivElement, AnnotationLayerProps>(
         pageHeight,
         addTextAnnotation,
         addCheckboxAnnotation,
+        addImageAnnotation,
         selectAnnotation,
       ]
     );
@@ -90,8 +102,24 @@ export const AnnotationLayer = forwardRef<HTMLDivElement, AnnotationLayerProps>(
         );
       }
 
+      if (annotation.type === "checkbox") {
+        return (
+          <CheckboxAnnotation
+            key={annotation.id}
+            annotation={annotation}
+            isSelected={isSelected}
+            pageWidth={pageWidth}
+            pageHeight={pageHeight}
+            onSelect={select}
+            onMove={moveAnnotation}
+            onToggle={toggleCheckbox}
+            onDelete={removeAnnotation}
+          />
+        );
+      }
+
       return (
-        <CheckboxAnnotation
+        <ImageAnnotation
           key={annotation.id}
           annotation={annotation}
           isSelected={isSelected}
@@ -99,7 +127,7 @@ export const AnnotationLayer = forwardRef<HTMLDivElement, AnnotationLayerProps>(
           pageHeight={pageHeight}
           onSelect={select}
           onMove={moveAnnotation}
-          onToggle={toggleCheckbox}
+          onResize={resizeAnnotation}
           onDelete={removeAnnotation}
         />
       );
@@ -115,7 +143,7 @@ export const AnnotationLayer = forwardRef<HTMLDivElement, AnnotationLayerProps>(
           cursor:
             tool === "text"
               ? "text"
-              : tool === "checkbox"
+              : tool === "checkbox" || tool === "image"
                 ? "crosshair"
                 : "default",
         }}

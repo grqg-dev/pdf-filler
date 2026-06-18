@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Annotation, TextAnnotation, CheckboxAnnotation } from "../types";
+import type { Annotation, TextAnnotation, CheckboxAnnotation, ImageAnnotation } from "../types";
 
 interface AnnotationState {
   annotationsByPage: Record<number, Annotation[]>;
@@ -99,4 +99,10 @@ export function isCheckboxAnnotation(
   annotation: Annotation
 ): annotation is CheckboxAnnotation {
   return annotation.type === "checkbox";
+}
+
+export function isImageAnnotation(
+  annotation: Annotation
+): annotation is ImageAnnotation {
+  return annotation.type === "image";
 }
