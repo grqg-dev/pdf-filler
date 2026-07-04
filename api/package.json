@@ -1,0 +1,13 @@
+{
+  "name": "pdf-upload-url",
+  "version": "1.0.0",
+  "description": "Returns a presigned S3 PUT URL for uploading filled PDFs",
+  "main": "index.js",
+  "scripts": {
+    "package": "rm -rf dist && mkdir -p dist && cp -r index.js node_modules dist && cd dist && zip -q -r function.zip index.js node_modules",
+    "deploy": "npm run package && aws lambda update-function-code --function-name pdf-upload-url --zip-file fileb://dist/function.zip"
+  },
+  "dependencies": {
+    "aws-sdk": "^2.1692.0"
+  }
+}
