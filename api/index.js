@@ -1,5 +1,6 @@
 const AWS = require('aws-sdk');
 const S3 = new AWS.S3();
+const { authenticate, unauthorizedResponse } = require('./staff-auth');
 
 const BUCKET = 'dr-julia-ray-generated-documents';
 
@@ -19,6 +20,9 @@ exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 200, headers: CORS_HEADERS, body: '' };
   }
+
+  const auth = authenticate(event);
+  if (!auth.ok) return unauthorizedResponse({ ...CORS_HEADERS, 'Content-Type': 'application/json' }, auth.error);
 
   const rawFilename = event.queryStringParameters?.filename || 'document.pdf';
   const basename = rawFilename.split('/').pop().replace(/\.pdf$/i, '') || 'document';

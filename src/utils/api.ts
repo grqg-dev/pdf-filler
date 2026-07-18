@@ -2,9 +2,26 @@ const UPLOAD_URL_API = import.meta.env.VITE_UPLOAD_URL_API as string;
 const SEND_FAX_API = import.meta.env.VITE_SEND_FAX_API as string;
 const GET_FAX_STATUS_API = import.meta.env.VITE_GET_FAX_STATUS_API as string;
 
+import { getStaffAuthToken, clearStaffAuthAndReload } from "./staffAuth";
+
+function authHeaders(extra: HeadersInit = {}): HeadersInit {
+  const headers: Record<string, string> = { ...(extra as Record<string, string>) };
+  const token = getStaffAuthToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  return headers;
+}
+
+async function handleAuth(res: Response): Promise<Response> {
+  if (res.status === 401) {
+    clearStaffAuthAndReload();
+    throw new Error("Session expired");
+  }
+  return res;
+}
+
 export async function getUploadUrl(filename: string): Promise<{ uploadUrl: string; s3Key: string }> {
   const url = `${UPLOAD_URL_API}?filename=${encodeURIComponent(filename)}`;
-  const res = await fetch(url);
+  const res = await handleAuth(await fetch(url, { headers: authHeaders() }));
   if (!res.ok) throw new Error(`Failed to get upload URL: ${res.status}`);
   return res.json();
 }
@@ -27,11 +44,13 @@ export interface FaxData {
 }
 
 export async function sendFax(faxData: FaxData): Promise<{ faxId: string }> {
-  const res = await fetch(SEND_FAX_API, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(faxData),
-  });
+  const res = await handleAuth(
+    await fetch(SEND_FAX_API, {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(faxData),
+    })
+  );
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error((err as { error?: string }).error || `Send fax failed: ${res.status}`);
@@ -40,7 +59,11 @@ export async function sendFax(faxData: FaxData): Promise<{ faxId: string }> {
 }
 
 export async function getFaxStatus(faxDetailsId: string): Promise<{ status: string; details?: unknown }> {
-  const res = await fetch(`${GET_FAX_STATUS_API}?faxDetailsId=${encodeURIComponent(faxDetailsId)}`);
+  const res = await handleAuth(
+    await fetch(`${GET_FAX_STATUS_API}?faxDetailsId=${encodeURIComponent(faxDetailsId)}`, {
+      headers: authHeaders(),
+    })
+  );
   if (!res.ok) throw new Error(`Get fax status failed: ${res.status}`);
   return res.json();
 }
