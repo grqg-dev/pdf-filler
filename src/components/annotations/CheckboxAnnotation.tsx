@@ -1,156 +1,93 @@
-import { useCallback, useRef, useState } from "react";
-import { Check } from "lucide-react";
 import type { CheckboxAnnotation as CheckboxAnnotationType } from "../../types";
 import { DeleteButton } from "./DeleteButton";
-import { clamp } from "../../utils/geometry";
+import { ResizeHandle } from "./ResizeHandle";
+import { useAnnotationActions } from "../../hooks/useAnnotationActions";
+import { useDragResize } from "../../hooks/useDragResize";
+import { CHECK_MARK_POINTS, checkStrokeWidth } from "../../utils/pdfExport";
+import { INK_COLOR } from "../../utils/constants";
 
 interface CheckboxAnnotationProps {
   annotation: CheckboxAnnotationType;
   isSelected: boolean;
+  scale: number;
   pageWidth: number;
   pageHeight: number;
-  onSelect: (id: string) => void;
-  onMove: (id: string, x: number, y: number) => void;
-  onToggle: (id: string) => void;
-  onDelete: (id: string) => void;
 }
 
-const DRAG_THRESHOLD = 3;
-
-export const CheckboxAnnotation = function CheckboxAnnotation({
+export function CheckboxAnnotation({
   annotation,
   isSelected,
+  scale,
   pageWidth,
   pageHeight,
-  onSelect,
-  onMove,
-  onToggle,
-  onDelete,
 }: CheckboxAnnotationProps) {
-  const [isDragging, setIsDragging] = useState(false);
-  const dragState = useRef<{
-    startX: number;
-    startY: number;
-    startAnnotationX: number;
-    startAnnotationY: number;
-    hasMoved: boolean;
-  } | null>(null);
+  const { select, moveAnnotation, resizeAnnotation, toggleCheckbox, removeAnnotation, commit } =
+    useAnnotationActions();
 
-  const handlePointerDown = useCallback(
-    (e: React.PointerEvent) => {
-      if (e.button !== 0) return;
-      e.stopPropagation();
-
-      dragState.current = {
-        startX: e.clientX,
-        startY: e.clientY,
-        startAnnotationX: annotation.x,
-        startAnnotationY: annotation.y,
-        hasMoved: false,
-      };
-
-      (e.target as HTMLElement).setPointerCapture(e.pointerId);
-      setIsDragging(true);
+  const { isDragging, bodyHandlers, resizeHandlers } = useDragResize({
+    annotation,
+    scale,
+    pageWidth,
+    pageHeight,
+    onMove: moveAnnotation,
+    onResize: resizeAnnotation,
+    onCommit: commit,
+    onClick: () => {
+      select(annotation.id);
+      toggleCheckbox(annotation.id);
     },
-    [annotation.x, annotation.y]
-  );
+  });
 
-  const handlePointerMove = useCallback(
-    (e: React.PointerEvent) => {
-      if (!dragState.current) return;
-
-      const dx = e.clientX - dragState.current.startX;
-      const dy = e.clientY - dragState.current.startY;
-
-      if (
-        !dragState.current.hasMoved &&
-        Math.sqrt(dx * dx + dy * dy) > DRAG_THRESHOLD
-      ) {
-        dragState.current.hasMoved = true;
-      }
-
-      if (dragState.current.hasMoved) {
-        const newX = clamp(
-          dragState.current.startAnnotationX + dx,
-          0,
-          pageWidth - annotation.width
-        );
-        const newY = clamp(
-          dragState.current.startAnnotationY + dy,
-          0,
-          pageHeight - annotation.height
-        );
-        onMove(annotation.id, newX, newY);
-      }
-    },
-    [annotation, pageWidth, pageHeight, onMove]
-  );
-
-  const handlePointerUp = useCallback(
-    (e: React.PointerEvent) => {
-      if (!dragState.current) return;
-
-      const didDrag = dragState.current.hasMoved;
-      dragState.current = null;
-      setIsDragging(false);
-
-      if (!didDrag) {
-        onSelect(annotation.id);
-        onToggle(annotation.id);
-      }
-
-      (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-    },
-    [annotation.id, onSelect, onToggle]
-  );
-
-  const handleDelete = useCallback(() => {
-    onDelete(annotation.id);
-  }, [annotation.id, onDelete]);
+  const w = annotation.width;
+  const h = annotation.height;
 
   return (
     <div
-      className={`
-        absolute flex items-center justify-center
-        ${isDragging ? "cursor-grabbing" : "cursor-pointer"}
-      `}
+      {...bodyHandlers}
+      onMouseDown={(e) => e.preventDefault()}
+      className={`absolute ${isDragging ? "cursor-grabbing" : "cursor-pointer"}`}
       style={{
-        left: annotation.x,
-        top: annotation.y,
-        width: annotation.width,
-        height: annotation.height,
+        left: annotation.x * scale,
+        top: annotation.y * scale,
+        width: w * scale,
+        height: h * scale,
+        // The outline is editor-only; only the check mark is exported.
+        outline: isSelected
+          ? "2px solid #2563eb"
+          : annotation.checked
+            ? "1px dashed rgba(100,116,139,0.45)"
+            : "1px dashed #64748b",
+        touchAction: "none",
       }}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerUp}
       role="checkbox"
       aria-checked={annotation.checked}
-      aria-label="Checkbox annotation"
+      aria-label="Check mark"
+      data-annotation="checkbox"
     >
-      <div
-        className={`
-          w-full h-full rounded flex items-center justify-center
-          transition-colors duration-150
-          ${annotation.checked ? "bg-blue-50" : "bg-white"}
-        `}
-        style={{
-          border: isSelected
-            ? "2px solid #2563eb"
-            : annotation.checked
-              ? "2px solid #2563eb"
-              : "2px solid #334155",
-        }}
-      >
-        {annotation.checked && (
-          <Check
-            className="w-full h-full text-blue-600 p-0.5"
-            strokeWidth={3}
+      {annotation.checked && (
+        <svg
+          viewBox={`0 0 ${w} ${h}`}
+          width="100%"
+          height="100%"
+          className="block pointer-events-none"
+        >
+          <polyline
+            points={CHECK_MARK_POINTS.map(([px, py]) => `${px * w},${py * h}`).join(" ")}
+            fill="none"
+            stroke={INK_COLOR}
+            strokeWidth={checkStrokeWidth(w)}
+            strokeLinecap="round"
+            strokeLinejoin="round"
           />
-        )}
-      </div>
+        </svg>
+      )}
 
-      {isSelected && !isDragging && <DeleteButton onDelete={handleDelete} />}
+      {isSelected && !isDragging && (
+        <>
+          <DeleteButton onDelete={() => removeAnnotation(annotation.id)} />
+          <ResizeHandle handlers={resizeHandlers} />
+        </>
+      )}
     </div>
   );
-};
+}

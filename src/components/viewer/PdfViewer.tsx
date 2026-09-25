@@ -1,4 +1,5 @@
-import { useRef, useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { X } from "lucide-react";
 import { usePdfDocument } from "../../hooks/usePdfDocument";
 import { useAppStore } from "../../store/useAppStore";
 import { useExportPdf } from "../../hooks/useExportPdf";
@@ -15,18 +16,27 @@ interface PdfViewerProps {
 }
 
 function getDisplayName(source: File | string): string {
-  if (typeof source === "string") {
-    return source.split("/").pop()?.split("?")[0] ?? "document.pdf";
+  if (typeof source !== "string") return source.name;
+  const last = source.split("?")[0].split("/").pop() || "document.pdf";
+  try {
+    return decodeURIComponent(last);
+  } catch {
+    return last;
   }
-  return source.name;
 }
 
 export function PdfViewer({ source }: PdfViewerProps) {
   const scale = useAppStore((state) => state.scale);
+  const notice = useAppStore((state) => state.notice);
+  const setNotice = useAppStore((state) => state.setNotice);
   const { doc, numPages, isLoading, error } = usePdfDocument(source);
-  const { exportPdf, exportBlob, isExporting, registerPageRef } = useExportPdf();
+
+  const displayName = getDisplayName(source);
+  const baseName = displayName.replace(/\.pdf$/i, "") || "document";
+
+  const { exportPdf, exportBlob, isExporting, exportError, clearExportError } =
+    useExportPdf(doc, baseName);
   const { run: saveAndFax, saving, error: faxSaveError } = useSaveAndFax();
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const [faxDialogOpen, setFaxDialogOpen] = useState(false);
   const [faxS3Key, setFaxS3Key] = useState<string | null>(null);
@@ -35,28 +45,43 @@ export function PdfViewer({ source }: PdfViewerProps) {
 
   useKeyboardShortcuts();
 
-  const displayName = getDisplayName(source);
-
   const handleFax = useCallback(async () => {
     setFaxInitError(null);
     try {
-      const rawName =
-        typeof source === "string"
-          ? (source.split("/").pop()?.split("?")[0] ?? "document.pdf")
-          : source.name;
-      const baseName = rawName.replace(/\.pdf$/i, "") || "filled";
       const s3Key = await saveAndFax(exportBlob, `${baseName}.pdf`);
       setFaxS3Key(s3Key);
       setFaxDialogOpen(true);
     } catch (err) {
-      setFaxInitError(err instanceof Error ? err.message : "Failed to prepare fax");
+      console.error("Preparing fax failed", err);
+      setFaxInitError(
+        `Couldn't prepare the fax: ${err instanceof Error ? err.message : "unknown error"}`
+      );
     }
-  }, [source, saveAndFax, exportBlob]);
+  }, [baseName, saveAndFax, exportBlob]);
 
   const handleFaxSent = useCallback((faxId: string) => {
     setFaxDialogOpen(false);
     setFaxDetailsId(faxId);
   }, []);
+
+  const errorMessage =
+    (exportError && `Couldn't create the PDF: ${exportError}`) ||
+    faxInitError ||
+    (faxSaveError && !faxInitError ? faxSaveError : null) ||
+    notice;
+
+  const dismissError = () => {
+    clearExportError();
+    setFaxInitError(null);
+    setNotice(null);
+  };
+
+  // Notices clear themselves; errors stay until dismissed.
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 6000);
+    return () => clearTimeout(t);
+  }, [notice, setNotice]);
 
   return (
     <AppLayout
@@ -64,12 +89,10 @@ export function PdfViewer({ source }: PdfViewerProps) {
       isExporting={isExporting}
       onFax={handleFax}
       isFaxing={saving}
+      canExport={!!doc}
     >
       <Header fileName={displayName} numPages={numPages} />
-      <div
-        ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto bg-slate-100"
-      >
+      <div className="flex-1 overflow-auto bg-slate-100">
         {isLoading && (
           <div className="flex flex-col items-center justify-center h-full gap-4">
             <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
@@ -84,8 +107,8 @@ export function PdfViewer({ source }: PdfViewerProps) {
               <p className="text-red-500 text-sm">{error.message}</p>
               {typeof source === "string" && (
                 <p className="text-red-400 text-xs mt-2">
-                  Make sure the URL is publicly accessible and the server allows
-                  cross-origin requests (CORS).
+                  The link may have expired. Go back to the document generator
+                  and open Edit / Annotate again.
                 </p>
               )}
             </div>
@@ -93,15 +116,9 @@ export function PdfViewer({ source }: PdfViewerProps) {
         )}
 
         {!isLoading && !error && doc && (
-          <div className="flex flex-col items-center py-6 gap-6">
+          <div className="flex flex-col items-center py-6 gap-6 min-w-fit px-6">
             {Array.from({ length: numPages }, (_, i) => (
-              <PageRenderer
-                key={i}
-                doc={doc}
-                pageIndex={i}
-                scale={scale}
-                registerPageRef={registerPageRef}
-              />
+              <PageRenderer key={i} doc={doc} pageIndex={i} scale={scale} />
             ))}
           </div>
         )}
@@ -112,15 +129,26 @@ export function PdfViewer({ source }: PdfViewerProps) {
           <div className="bg-white rounded-xl px-6 py-4 shadow-lg flex items-center gap-3">
             <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
             <p className="text-slate-700 font-medium">
-              {saving ? "Saving PDF..." : "Exporting PDF..."}
+              {saving ? "Preparing fax..." : "Creating PDF..."}
             </p>
           </div>
         </div>
       )}
 
-      {(faxInitError ?? faxSaveError) && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl shadow-lg max-w-sm text-center">
-          {faxInitError ?? faxSaveError}
+      {errorMessage && (
+        <div
+          role="alert"
+          className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 bg-red-50 border border-red-200 text-red-800 text-sm pl-4 pr-2 py-3 rounded-xl shadow-lg max-w-md flex items-start gap-3"
+        >
+          <span className="flex-1">{errorMessage}</span>
+          <button
+            type="button"
+            onClick={dismissError}
+            className="p-1 rounded-md hover:bg-red-100"
+            aria-label="Dismiss"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 

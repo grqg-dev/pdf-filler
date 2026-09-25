@@ -1,7 +1,13 @@
-export type Tool = "select" | "text" | "checkbox" | "image";
+export type Tool = "select" | "text" | "checkbox" | "image" | "whiteout" | "eraser";
 
-export type AnnotationType = "text" | "checkbox" | "image";
+export type AnnotationType = "text" | "checkbox" | "image" | "whiteout" | "eraser";
 
+/**
+ * All geometry is in page units: the pdf.js viewport at scale 1 (PDF points,
+ * with page rotation already applied). The editor multiplies by the current
+ * zoom to render, and the exporter multiplies by the export scale, so
+ * annotations stay put when the user zooms.
+ */
 export interface BaseAnnotation {
   id: string;
   type: AnnotationType;
@@ -28,7 +34,24 @@ export interface ImageAnnotation extends BaseAnnotation {
   src: string;
 }
 
-export type Annotation = TextAnnotation | CheckboxAnnotation | ImageAnnotation;
+/** Opaque white rectangle that covers whatever is under it. */
+export interface WhiteoutAnnotation extends BaseAnnotation {
+  type: "whiteout";
+}
+
+/** Freehand white brush stroke. x/y/width/height is the stroke's bounding box. */
+export interface EraserAnnotation extends BaseAnnotation {
+  type: "eraser";
+  points: Point[];
+  strokeWidth: number;
+}
+
+export type Annotation =
+  | TextAnnotation
+  | CheckboxAnnotation
+  | ImageAnnotation
+  | WhiteoutAnnotation
+  | EraserAnnotation;
 
 export interface Rect {
   x: number;

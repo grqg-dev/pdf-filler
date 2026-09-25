@@ -4,6 +4,10 @@ const { authenticate, unauthorizedResponse } = require('./staff-auth');
 
 const BUCKET = 'dr-julia-ray-generated-documents';
 
+// Dr. Ray's signature for the editor's Sign tool. Served here, behind staff
+// auth, so it is never a public static asset on the Amplify app.
+const SIGNATURE = { Bucket: 'dr-julia-ray-templates', Key: 'signatures/julia-ray.png' };
+
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET,OPTIONS',
@@ -23,6 +27,24 @@ exports.handler = async (event) => {
 
   const auth = authenticate(event);
   if (!auth.ok) return unauthorizedResponse({ ...CORS_HEADERS, 'Content-Type': 'application/json' }, auth.error);
+
+  if (event.queryStringParameters?.asset === 'signature') {
+    try {
+      const obj = await S3.getObject(SIGNATURE).promise();
+      return {
+        statusCode: 200,
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+        body: JSON.stringify({ dataUrl: `data:image/png;base64,${obj.Body.toString('base64')}` }),
+      };
+    } catch (err) {
+      console.error('Error loading signature:', err);
+      return {
+        statusCode: 500,
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ error: 'Failed to load signature' }),
+      };
+    }
+  }
 
   const rawFilename = event.queryStringParameters?.filename || 'document.pdf';
   const basename = rawFilename.split('/').pop().replace(/\.pdf$/i, '') || 'document';

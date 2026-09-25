@@ -13,22 +13,24 @@ export function Header({ fileName, numPages }: HeaderProps) {
           <FileText className="w-4 h-4 text-blue-600" />
         </div>
         <div className="min-w-0">
-          <h1 className="text-sm font-semibold text-slate-800 truncate max-w-[240px] sm:max-w-md">
+          <h1 className="text-sm font-semibold text-slate-800 truncate max-w-[240px] sm:max-w-xl">
             {fileName}
           </h1>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-500">
             {numPages} page{numPages === 1 ? "" : "s"}
           </p>
         </div>
       </div>
 
-      <div className="hidden sm:flex items-center gap-3 text-xs text-slate-400">
+      <div className="hidden sm:flex items-center gap-3 text-xs text-slate-500">
         <div className="flex items-center gap-1.5">
           <Keyboard className="w-3.5 h-3.5" />
-          <span>Delete to remove</span>
+          <span>Del removes</span>
         </div>
         <span className="text-slate-300">|</span>
-        <span>Esc to deselect</span>
+        <span>Ctrl/Cmd+Z undo</span>
+        <span className="text-slate-300">|</span>
+        <span>Esc deselects</span>
       </div>
     </header>
   );

@@ -1,8 +1,17 @@
 import { create } from "zustand";
 import type { Annotation, TextAnnotation, CheckboxAnnotation, ImageAnnotation } from "../types";
 
+type AnnotationMap = Record<number, Annotation[]>;
+
+const MAX_HISTORY = 100;
+
 interface AnnotationState {
-  annotationsByPage: Record<number, Annotation[]>;
+  annotationsByPage: AnnotationMap;
+  past: AnnotationMap[];
+
+  /** Snapshot the current state so the next change can be undone. */
+  commit: () => void;
+  undo: () => void;
 
   addAnnotation: (annotation: Annotation) => void;
   updateAnnotation: (
@@ -10,16 +19,32 @@ interface AnnotationState {
     updater: (annotation: Annotation) => Annotation
   ) => void;
   deleteAnnotation: (id: string) => void;
-  deleteAnnotationsForPage: (pageIndex: number) => void;
-  getAnnotationsForPage: (pageIndex: number) => Annotation[];
   getAnnotationById: (id: string) => Annotation | undefined;
   reset: () => void;
 }
 
 export const useAnnotationStore = create<AnnotationState>((set, get) => ({
   annotationsByPage: {},
+  past: [],
+
+  commit: () => {
+    set((state) => ({
+      past: [...state.past, state.annotationsByPage].slice(-MAX_HISTORY),
+    }));
+  },
+
+  undo: () => {
+    set((state) => {
+      if (state.past.length === 0) return state;
+      return {
+        annotationsByPage: state.past[state.past.length - 1],
+        past: state.past.slice(0, -1),
+      };
+    });
+  },
 
   addAnnotation: (annotation) => {
+    get().commit();
     set((state) => ({
       annotationsByPage: {
         ...state.annotationsByPage,
@@ -31,9 +56,11 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
     }));
   },
 
+  // Does not snapshot on its own: callers commit() once at the start of a
+  // gesture (drag, resize, typing session) so undo steps are meaningful.
   updateAnnotation: (id, updater) => {
     set((state) => {
-      const next: Record<number, Annotation[]> = {};
+      const next: AnnotationMap = {};
 
       for (const [pageIndex, annotations] of Object.entries(
         state.annotationsByPage
@@ -48,8 +75,10 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
   },
 
   deleteAnnotation: (id) => {
+    if (!get().getAnnotationById(id)) return;
+    get().commit();
     set((state) => {
-      const next: Record<number, Annotation[]> = {};
+      const next: AnnotationMap = {};
 
       for (const [pageIndex, annotations] of Object.entries(
         state.annotationsByPage
@@ -66,18 +95,6 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
     });
   },
 
-  deleteAnnotationsForPage: (pageIndex) => {
-    set((state) => {
-      const next = { ...state.annotationsByPage };
-      delete next[pageIndex];
-      return { annotationsByPage: next };
-    });
-  },
-
-  getAnnotationsForPage: (pageIndex) => {
-    return get().annotationsByPage[pageIndex] ?? [];
-  },
-
   getAnnotationById: (id) => {
     for (const annotations of Object.values(get().annotationsByPage)) {
       const found = annotations.find((annotation) => annotation.id === id);
@@ -86,7 +103,7 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
     return undefined;
   },
 
-  reset: () => set({ annotationsByPage: {} }),
+  reset: () => set({ annotationsByPage: {}, past: [] }),
 }));
 
 export function isTextAnnotation(
@@ -105,4 +122,9 @@ export function isImageAnnotation(
   annotation: Annotation
 ): annotation is ImageAnnotation {
   return annotation.type === "image";
+}
+
+/** White-out marks render beneath everything else, so you can erase then type over. */
+export function isCoverAnnotation(annotation: Annotation): boolean {
+  return annotation.type === "whiteout" || annotation.type === "eraser";
 }

@@ -6,12 +6,17 @@ import {
   ZoomOut,
   Download,
   Upload,
-  PenTool,
+  Signature,
   Send,
+  RectangleHorizontal,
+  Eraser,
+  Undo2,
 } from "lucide-react";
 import { useAppStore } from "../../store/useAppStore";
 import { useAnnotationStore } from "../../store/useAnnotationStore";
+import { useAnnotationActions } from "../../hooks/useAnnotationActions";
 import { ToolbarButton } from "./ToolbarButton";
+import { ERASER_SIZES, TEXT_FONT_SIZES } from "../../utils/constants";
 import type { Tool } from "../../types";
 
 interface SidebarProps {
@@ -19,22 +24,32 @@ interface SidebarProps {
   isExporting: boolean;
   onFax?: () => void;
   isFaxing?: boolean;
+  canExport?: boolean;
 }
 
-const TOOLS: { id: Tool; label: string; icon: typeof MousePointer }[] = [
-  { id: "select", label: "Select", icon: MousePointer },
-  { id: "text", label: "Text", icon: Type },
-  { id: "checkbox", label: "Check", icon: CheckSquare },
-  { id: "image", label: "Sign", icon: PenTool },
+const TOOLS: { id: Tool; label: string; icon: typeof MousePointer; hint: string }[] = [
+  { id: "select", label: "Select", icon: MousePointer, hint: "Select, move, and resize items (V)" },
+  { id: "text", label: "Text", icon: Type, hint: "Click the page to add text (T)" },
+  { id: "checkbox", label: "Check", icon: CheckSquare, hint: "Click to add a check mark (C)" },
+  { id: "image", label: "Sign", icon: Signature, hint: "Click to place Dr. Ray's signature (S)" },
+  { id: "whiteout", label: "White-out", icon: RectangleHorizontal, hint: "Drag a white box over text to cover it (W)" },
+  { id: "eraser", label: "Eraser", icon: Eraser, hint: "Paint white over the page (E)" },
 ];
 
-const FONT_SIZES = [10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40];
+const panelClass =
+  "flex flex-col items-center py-2 px-1 mx-1 rounded-xl bg-slate-50 border border-slate-100";
+const panelLabelClass =
+  "text-[9px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5";
+const selectClass =
+  "w-[4.5rem] h-8 text-xs text-center bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500";
 
-export function Sidebar({ onExport, isExporting, onFax, isFaxing }: SidebarProps) {
+export function Sidebar({ onExport, isExporting, onFax, isFaxing, canExport = true }: SidebarProps) {
   const tool = useAppStore((state) => state.tool);
   const scale = useAppStore((state) => state.scale);
   const textFontSize = useAppStore((state) => state.textFontSize);
   const setTextFontSize = useAppStore((state) => state.setTextFontSize);
+  const eraserSize = useAppStore((state) => state.eraserSize);
+  const setEraserSize = useAppStore((state) => state.setEraserSize);
   const selectedId = useAppStore((state) => state.selectedId);
   const setTool = useAppStore((state) => state.setTool);
   const zoomIn = useAppStore((state) => state.zoomIn);
@@ -42,9 +57,12 @@ export function Sidebar({ onExport, isExporting, onFax, isFaxing }: SidebarProps
   const setPdfSource = useAppStore((state) => state.setPdfSource);
   const resetApp = useAppStore((state) => state.reset);
   const resetAnnotations = useAnnotationStore((state) => state.reset);
-  const updateAnnotation = useAnnotationStore(
-    (state) => state.updateAnnotation
+  const undo = useAnnotationStore((state) => state.undo);
+  const canUndo = useAnnotationStore((state) => state.past.length > 0);
+  const hasEdits = useAnnotationStore(
+    (state) => Object.values(state.annotationsByPage).some((list) => list.length > 0)
   );
+  const { setTextFontSizeFor } = useAnnotationActions();
 
   const selectedAnnotation = useAnnotationStore((state) => {
     if (!selectedId) return undefined;
@@ -55,60 +73,75 @@ export function Sidebar({ onExport, isExporting, onFax, isFaxing }: SidebarProps
     return undefined;
   });
 
-  const isTextActive =
-    tool === "text" || selectedAnnotation?.type === "text";
+  const isTextActive = tool === "text" || selectedAnnotation?.type === "text";
 
   const currentFontSize =
-    selectedAnnotation?.type === "text"
-      ? selectedAnnotation.fontSize
-      : textFontSize;
+    selectedAnnotation?.type === "text" ? selectedAnnotation.fontSize : textFontSize;
 
   const handleFontSizeChange = (size: number) => {
     setTextFontSize(size);
     if (selectedAnnotation?.type === "text") {
-      updateAnnotation(selectedAnnotation.id, (a) => ({
-        ...a,
-        fontSize: size,
-      }));
+      setTextFontSizeFor(selectedAnnotation.id, size);
     }
   };
 
   const handleUploadNew = () => {
+    if (hasEdits && !window.confirm("Discard your edits and open a different PDF?")) return;
     resetApp();
     resetAnnotations();
     setPdfSource(null);
   };
 
+  const busy = isExporting || isFaxing;
+
   return (
-    <aside className="flex flex-col items-center w-20 py-4 bg-white border-r border-slate-200 shadow-sm z-10">
-      <div className="flex flex-col items-center gap-1.5 mb-4">
-        {TOOLS.map(({ id, label, icon }) => (
+    <aside className="flex flex-col items-center w-20 py-3 bg-white border-r border-slate-200 shadow-sm z-10 overflow-y-auto">
+      <div className="flex flex-col items-center gap-1 mb-3">
+        {TOOLS.map(({ id, label, icon, hint }) => (
           <div key={id} className="flex flex-col items-center gap-1">
             <ToolbarButton
               icon={icon}
               label={label}
+              title={hint}
               isActive={tool === id}
-              onClick={() => setTool(id)}
+              onClick={() => {
+                (document.activeElement as HTMLElement | null)?.blur?.();
+                setTool(id);
+              }}
             />
             {id === "text" && isTextActive && (
-              <div className="flex flex-col items-center py-2 px-1 mx-1 rounded-xl bg-slate-50 border border-slate-100">
-                <label
-                  htmlFor="font-size"
-                  className="text-[9px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5"
-                >
+              <div className={panelClass}>
+                <label htmlFor="font-size" className={panelLabelClass}>
                   Size
                 </label>
                 <select
                   id="font-size"
                   value={currentFontSize}
-                  onChange={(e) =>
-                    handleFontSizeChange(Number(e.target.value))
-                  }
-                  className="w-[4.5rem] h-8 text-xs text-center bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  onChange={(e) => handleFontSizeChange(Number(e.target.value))}
+                  className={selectClass}
                 >
-                  {FONT_SIZES.map((size) => (
+                  {TEXT_FONT_SIZES.map((size) => (
                     <option key={size} value={size}>
-                      {size}px
+                      {size} pt
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {id === "eraser" && tool === "eraser" && (
+              <div className={panelClass}>
+                <label htmlFor="eraser-size" className={panelLabelClass}>
+                  Brush
+                </label>
+                <select
+                  id="eraser-size"
+                  value={eraserSize}
+                  onChange={(e) => setEraserSize(Number(e.target.value))}
+                  className={selectClass}
+                >
+                  {ERASER_SIZES.map((size, i) => (
+                    <option key={size} value={size}>
+                      {["Fine", "Small", "Medium", "Large"][i] ?? `${size} pt`}
                     </option>
                   ))}
                 </select>
@@ -118,38 +151,48 @@ export function Sidebar({ onExport, isExporting, onFax, isFaxing }: SidebarProps
         ))}
       </div>
 
-      <div className="w-12 h-px bg-slate-200 mb-4" />
+      <div className="w-12 h-px bg-slate-200 mb-3" />
 
-      <div className="flex flex-col gap-1.5 mb-4">
+      <div className="flex flex-col items-center gap-1 mb-3">
+        <ToolbarButton
+          icon={Undo2}
+          label="Undo"
+          title="Undo (Ctrl/Cmd+Z)"
+          onClick={undo}
+          disabled={!canUndo}
+        />
         <ToolbarButton icon={ZoomIn} label="Zoom In" onClick={zoomIn} />
-        <div className="text-xs font-semibold text-slate-400 text-center py-1">
+        <div className="text-xs font-semibold text-slate-500 text-center py-0.5">
           {Math.round(scale * 100)}%
         </div>
         <ToolbarButton icon={ZoomOut} label="Zoom Out" onClick={zoomOut} />
       </div>
 
-      <div className="w-12 h-px bg-slate-200 mb-4" />
+      <div className="w-12 h-px bg-slate-200 mb-3" />
 
-      <div className="flex flex-col gap-1.5 mt-auto">
+      <div className="flex flex-col gap-1 mt-auto">
         <ToolbarButton
           icon={Download}
-          label="Export"
+          label="Download"
+          title="Download the edited PDF"
           onClick={onExport}
-          disabled={isExporting || isFaxing}
+          disabled={busy || !canExport}
         />
         {onFax && (
           <ToolbarButton
             icon={Send}
             label="Fax"
+            title="Fax the edited PDF"
             onClick={onFax}
-            disabled={isExporting || isFaxing}
+            disabled={busy || !canExport}
           />
         )}
         <ToolbarButton
           icon={Upload}
           label="New"
+          title="Open a different PDF"
           onClick={handleUploadNew}
-          disabled={isExporting || isFaxing}
+          disabled={busy}
         />
       </div>
     </aside>

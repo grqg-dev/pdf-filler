@@ -26,6 +26,16 @@ export async function getUploadUrl(filename: string): Promise<{ uploadUrl: strin
   return res.json();
 }
 
+/** Dr. Ray's signature as a PNG data URL. Served behind staff auth so it is never a public asset. */
+export async function getSignatureDataUrl(): Promise<string> {
+  const url = `${UPLOAD_URL_API}?asset=signature`;
+  const res = await handleAuth(await fetch(url, { headers: authHeaders() }));
+  if (!res.ok) throw new Error(`Failed to load signature: ${res.status}`);
+  const body = (await res.json()) as { dataUrl?: string };
+  if (!body.dataUrl) throw new Error("Signature missing from response");
+  return body.dataUrl;
+}
+
 export async function uploadPdf(uploadUrl: string, blob: Blob): Promise<void> {
   const res = await fetch(uploadUrl, {
     method: "PUT",

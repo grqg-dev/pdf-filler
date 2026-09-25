@@ -1,181 +1,194 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { TextAnnotation as TextAnnotationType } from "../../types";
 import { DeleteButton } from "./DeleteButton";
-import { clamp } from "../../utils/geometry";
+import { ResizeHandle } from "./ResizeHandle";
+import { useAnnotationActions } from "../../hooks/useAnnotationActions";
+import { useDragResize } from "../../hooks/useDragResize";
+import {
+  INK_COLOR,
+  TEXT_FONT_FAMILY,
+  TEXT_LINE_HEIGHT,
+  TEXT_PADDING,
+} from "../../utils/constants";
 
 interface TextAnnotationProps {
   annotation: TextAnnotationType;
   isSelected: boolean;
+  scale: number;
   pageWidth: number;
   pageHeight: number;
-  onSelect: (id: string) => void;
-  onMove: (id: string, x: number, y: number) => void;
-  onChange: (id: string, value: string) => void;
-  onDelete: (id: string) => void;
 }
 
-const DRAG_THRESHOLD = 3;
-
-export const TextAnnotation = function TextAnnotation({
+export function TextAnnotation({
   annotation,
   isSelected,
+  scale,
   pageWidth,
   pageHeight,
-  onSelect,
-  onMove,
-  onChange,
-  onDelete,
 }: TextAnnotationProps) {
+  const {
+    select,
+    moveAnnotation,
+    resizeAnnotation,
+    setTextValue,
+    removeAnnotation,
+    discardIfEmpty,
+    commit,
+  } = useAnnotationActions();
   const contentRef = useRef<HTMLDivElement>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const dragState = useRef<{
-    startX: number;
-    startY: number;
-    startAnnotationX: number;
-    startAnnotationY: number;
-    hasMoved: boolean;
-  } | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  // One undo step per editing session, taken on the first keystroke.
+  const typedThisSession = useRef(false);
 
-  const wasSelectedRef = useRef(false);
+  const focusEditor = useCallback(() => {
+    const el = contentRef.current;
+    if (!el) return;
+    el.focus();
+    // Put the caret at the end of existing text.
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    range.collapse(false);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+  }, []);
 
+  // Keep the DOM in sync with the store (undo, programmatic edits) without
+  // resetting the caret while the user types.
   useEffect(() => {
-    if (
-      contentRef.current &&
-      contentRef.current.textContent !== annotation.value
-    ) {
-      contentRef.current.textContent = annotation.value;
+    const el = contentRef.current;
+    if (el && el.textContent !== annotation.value) {
+      el.textContent = annotation.value;
     }
   }, [annotation.value]);
 
+  // A freshly placed box starts in editing mode.
+  const wasSelected = useRef(false);
   useEffect(() => {
-    if (isSelected && !wasSelectedRef.current) {
-      contentRef.current?.focus();
+    if (isSelected && !wasSelected.current && annotation.value === "") {
+      focusEditor();
     }
-    wasSelectedRef.current = isSelected;
-  }, [isSelected]);
+    wasSelected.current = isSelected;
+  }, [isSelected, annotation.value, focusEditor]);
+
+  const { isDragging, bodyHandlers, resizeHandlers } = useDragResize({
+    annotation,
+    scale,
+    pageWidth,
+    pageHeight,
+    onMove: moveAnnotation,
+    onResize: resizeAnnotation,
+    onCommit: commit,
+    onClick: () => {
+      select(annotation.id);
+      focusEditor();
+    },
+  });
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
-      if (e.button !== 0) return;
-      if (document.activeElement === contentRef.current) return;
-      e.stopPropagation();
-
-      dragState.current = {
-        startX: e.clientX,
-        startY: e.clientY,
-        startAnnotationX: annotation.x,
-        startAnnotationY: annotation.y,
-        hasMoved: false,
-      };
-
-      (e.target as HTMLElement).setPointerCapture(e.pointerId);
-      setIsDragging(true);
-    },
-    [annotation.x, annotation.y]
-  );
-
-  const handlePointerMove = useCallback(
-    (e: React.PointerEvent) => {
-      if (!dragState.current) return;
-
-      const dx = e.clientX - dragState.current.startX;
-      const dy = e.clientY - dragState.current.startY;
-
-      if (
-        !dragState.current.hasMoved &&
-        Math.sqrt(dx * dx + dy * dy) > DRAG_THRESHOLD
-      ) {
-        dragState.current.hasMoved = true;
-        contentRef.current?.blur();
+      if (isEditing) {
+        // Let the browser place the caret; don't start a drag or let the
+        // page layer create another box underneath.
+        e.stopPropagation();
+        return;
       }
-
-      if (dragState.current.hasMoved) {
-        const newX = clamp(
-          dragState.current.startAnnotationX + dx,
-          0,
-          pageWidth - annotation.width
-        );
-        const newY = clamp(
-          dragState.current.startAnnotationY + dy,
-          0,
-          pageHeight - annotation.height
-        );
-        onMove(annotation.id, newX, newY);
-      }
+      bodyHandlers.onPointerDown(e);
     },
-    [annotation, pageWidth, pageHeight, onMove]
-  );
-
-  const handlePointerUp = useCallback(
-    (e: React.PointerEvent) => {
-      if (!dragState.current) return;
-
-      const didDrag = dragState.current.hasMoved;
-      dragState.current = null;
-      setIsDragging(false);
-
-      if (!didDrag) {
-        onSelect(annotation.id);
-        contentRef.current?.focus();
-      }
-
-      (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-    },
-    [annotation.id, onSelect]
+    [isEditing, bodyHandlers]
   );
 
   const handleInput = useCallback(
     (e: React.FormEvent<HTMLDivElement>) => {
-      onChange(annotation.id, e.currentTarget.textContent ?? "");
+      if (!typedThisSession.current) {
+        typedThisSession.current = true;
+        commit();
+      }
+      // plaintext-only editing can still leave a trailing <br>; normalise.
+      const value = (e.currentTarget.innerText ?? "").replace(/\n$/, "");
+      setTextValue(annotation.id, value, pageHeight);
     },
-    [annotation.id, onChange]
+    [annotation.id, commit, setTextValue, pageHeight]
   );
 
-  const handleDelete = useCallback(() => {
-    onDelete(annotation.id);
-  }, [annotation.id, onDelete]);
+  const fontPx = annotation.fontSize * scale;
 
   return (
     <div
-      className={`
-        absolute group
-        ${isDragging ? "cursor-grabbing" : "cursor-text"}
-      `}
+      className={`absolute group ${isEditing ? "cursor-text" : isDragging ? "cursor-grabbing" : "cursor-move"}`}
       style={{
-        left: annotation.x,
-        top: annotation.y,
-        width: annotation.width,
-        height: annotation.height,
+        left: annotation.x * scale,
+        top: annotation.y * scale,
+        width: annotation.width * scale,
+        height: annotation.height * scale,
+        outline: isSelected
+          ? "2px solid #2563eb"
+          : annotation.value
+            ? "1px dashed rgba(100,116,139,0.45)"
+            : "1px dashed #64748b",
+        outlineOffset: 1,
+        touchAction: "none",
       }}
       onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerUp}
+      onPointerMove={bodyHandlers.onPointerMove}
+      onPointerUp={bodyHandlers.onPointerUp}
+      onPointerCancel={bodyHandlers.onPointerCancel}
+      data-annotation="text"
     >
       <div
         ref={contentRef}
-        contentEditable
+        contentEditable="plaintext-only"
         suppressContentEditableWarning
+        role="textbox"
+        aria-multiline="true"
+        aria-label="Text box"
+        spellCheck={false}
         onInput={handleInput}
-        className={`
-          w-full h-full px-1.5 py-0.5 outline-none overflow-hidden
-          text-left leading-tight transition-colors duration-150
-          ${isSelected ? "bg-blue-50/40" : "bg-white/40"}
-          hover:bg-blue-50/30
-        `}
+        onFocus={() => {
+          setIsEditing(true);
+          typedThisSession.current = false;
+          select(annotation.id);
+        }}
+        onBlur={() => {
+          setIsEditing(false);
+          discardIfEmpty(annotation.id);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            e.preventDefault();
+            contentRef.current?.blur();
+          }
+        }}
+        className="w-full h-full outline-none"
         style={{
-          fontSize: annotation.fontSize,
-          color: "#1e293b",
+          fontFamily: TEXT_FONT_FAMILY,
+          fontSize: fontPx,
+          lineHeight: TEXT_LINE_HEIGHT,
+          padding: TEXT_PADDING * scale,
+          color: INK_COLOR,
           whiteSpace: "pre-wrap",
-          wordBreak: "break-word",
-          border: isSelected
-            ? "2px solid #2563eb"
-            : "1px dashed #cbd5e1",
-          borderRadius: "4px",
+          overflowWrap: "break-word",
+          overflow: "visible",
+          pointerEvents: isEditing ? "auto" : "none",
+          userSelect: isEditing ? "text" : "none",
         }}
       />
 
-      {isSelected && !isDragging && <DeleteButton onDelete={handleDelete} />}
+      {!annotation.value && !isEditing && (
+        <span
+          className="absolute inset-0 flex items-center text-slate-400 pointer-events-none"
+          style={{ fontSize: fontPx, paddingLeft: TEXT_PADDING * scale }}
+        >
+          Type here
+        </span>
+      )}
+
+      {isSelected && !isDragging && (
+        <>
+          <DeleteButton onDelete={() => removeAnnotation(annotation.id)} />
+          <ResizeHandle handlers={resizeHandlers} cursor="ew-resize" />
+        </>
+      )}
     </div>
   );
-};
+}

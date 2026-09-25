@@ -1,92 +1,58 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
+import type { PDFDocumentProxy } from "pdfjs-dist";
 import { useAppStore } from "../store/useAppStore";
-import { exportToPdf, exportToBlob, type ExportPageData } from "../utils/pdfExport";
-
-export interface ExportPageRef {
-  pageIndex: number;
-  canvas: HTMLCanvasElement;
-  overlayElement: HTMLElement;
-  widthPts: number;
-  heightPts: number;
-}
+import { useAnnotationStore } from "../store/useAnnotationStore";
+import { exportToBlob, exportToFile } from "../utils/pdfExport";
 
 interface UseExportPdfResult {
   exportPdf: () => Promise<void>;
   exportBlob: () => Promise<Blob>;
   isExporting: boolean;
-  exportError: Error | null;
-  registerPageRef: (pageIndex: number, ref: ExportPageRef | null) => void;
+  exportError: string | null;
+  clearExportError: () => void;
 }
 
-export function useExportPdf(): UseExportPdfResult {
+export function useExportPdf(
+  doc: PDFDocumentProxy | null,
+  baseName: string
+): UseExportPdfResult {
   const [isExporting, setIsExporting] = useState(false);
-  const [exportError, setExportError] = useState<Error | null>(null);
-  const pdfSource = useAppStore((state) => state.pdfSource);
+  const [exportError, setExportError] = useState<string | null>(null);
   const setIsExportingGlobal = useAppStore((state) => state.setIsExporting);
 
-  const pageRefs = useRef<Map<number, ExportPageRef>>(new Map());
-
-  const registerPageRef = useCallback(
-    (pageIndex: number, ref: ExportPageRef | null) => {
-      if (ref) {
-        pageRefs.current.set(pageIndex, ref);
-      } else {
-        pageRefs.current.delete(pageIndex);
-      }
-    },
-    []
-  );
+  const exportBlob = useCallback(async (): Promise<Blob> => {
+    if (!doc) throw new Error("The PDF has not finished loading");
+    // Commit any in-progress edit and clear selection before snapshotting.
+    (document.activeElement as HTMLElement | null)?.blur();
+    useAppStore.getState().selectAnnotation(null);
+    return exportToBlob(doc, useAnnotationStore.getState().annotationsByPage);
+  }, [doc]);
 
   const exportPdf = useCallback(async () => {
-    if (!pdfSource) return;
+    if (!doc) return;
 
     setIsExporting(true);
     setExportError(null);
     setIsExportingGlobal(true);
 
     try {
-      const pages: ExportPageData[] = [];
-      const sortedIndexes = Array.from(pageRefs.current.keys()).sort(
-        (a, b) => a - b
+      (document.activeElement as HTMLElement | null)?.blur();
+      useAppStore.getState().selectAnnotation(null);
+      await exportToFile(
+        doc,
+        useAnnotationStore.getState().annotationsByPage,
+        `${baseName}-edited.pdf`
       );
-
-      for (const pageIndex of sortedIndexes) {
-        const ref = pageRefs.current.get(pageIndex);
-        if (ref) {
-          pages.push(ref);
-        }
-      }
-
-      if (pages.length === 0) {
-        throw new Error("No pages available to export");
-      }
-
-      const rawName =
-        typeof pdfSource === "string"
-          ? (pdfSource.split("/").pop()?.split("?")[0] ?? "document.pdf")
-          : pdfSource.name;
-      const baseName = rawName.replace(/\.pdf$/i, "") || "filled";
-      await exportToPdf(pages, `${baseName}-filled.pdf`);
     } catch (err) {
-      setExportError(
-        err instanceof Error ? err : new Error("Export failed")
-      );
+      console.error("Export failed", err);
+      setExportError(err instanceof Error ? err.message : "Export failed");
     } finally {
       setIsExporting(false);
       setIsExportingGlobal(false);
     }
-  }, [pdfSource, setIsExportingGlobal]);
+  }, [doc, baseName, setIsExportingGlobal]);
 
-  const exportBlob = useCallback(async (): Promise<Blob> => {
-    const pages: ExportPageData[] = [];
-    const sortedIndexes = Array.from(pageRefs.current.keys()).sort((a, b) => a - b);
-    for (const pageIndex of sortedIndexes) {
-      const ref = pageRefs.current.get(pageIndex);
-      if (ref) pages.push(ref);
-    }
-    if (pages.length === 0) throw new Error("No pages available to export");
-    return exportToBlob(pages);
-  }, []);
+  const clearExportError = useCallback(() => setExportError(null), []);
 
-  return { exportPdf, exportBlob, isExporting, exportError, registerPageRef };
+  return { exportPdf, exportBlob, isExporting, exportError, clearExportError };
 }
