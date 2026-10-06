@@ -6,14 +6,17 @@ interface FaxStatusIndicatorProps {
 }
 
 export function FaxStatusIndicator({ faxDetailsId }: FaxStatusIndicatorProps) {
-  const { status, details, polling, pollCount, elapsedSeconds } = useFaxStatus(faxDetailsId);
+  const { status, details, polling, timedOut, pollCount, elapsedSeconds } = useFaxStatus(faxDetailsId);
+  const detailRecord = (details as { details?: { sentStatus?: string; faxDetailsId?: string; errorCode?: string } } | null)?.details;
+  const rawStatus = detailRecord?.sentStatus;
+  const displayId = detailRecord?.faxDetailsId || faxDetailsId;
 
   const getStatusDisplay = () => {
     switch (status) {
       case "queued":
         return {
           icon: Clock,
-          message: "Your fax has been queued",
+          message: timedOut ? "Fax was still queued when status checks stopped" : "Your fax has been queued",
           className: "bg-blue-50 text-blue-700 border-blue-200",
           iconColor: "text-blue-500",
           showSpinner: polling,
@@ -21,7 +24,7 @@ export function FaxStatusIndicator({ faxDetailsId }: FaxStatusIndicatorProps) {
       case "sending":
         return {
           icon: Send,
-          message: "Fax is being sent...",
+          message: timedOut ? "Fax was still sending when status checks stopped" : "Fax is being sent...",
           className: "bg-blue-50 text-blue-700 border-blue-200",
           iconColor: "text-blue-500",
           showSpinner: polling,
@@ -37,7 +40,7 @@ export function FaxStatusIndicator({ faxDetailsId }: FaxStatusIndicatorProps) {
       case "failed":
         return {
           icon: XCircle,
-          message: `Fax failed: ${(details as { details?: { errorCode?: string } })?.details?.errorCode ?? "Unknown error"}`,
+          message: `Fax failed: ${detailRecord?.errorCode ?? "Unknown error"}`,
           className: "bg-red-50 text-red-700 border-red-200",
           iconColor: "text-red-500",
           showSpinner: false,
@@ -45,7 +48,11 @@ export function FaxStatusIndicator({ faxDetailsId }: FaxStatusIndicatorProps) {
       default:
         return {
           icon: Radio,
-          message: "Checking fax status...",
+          message: timedOut
+            ? `Status check stopped. Last status: ${rawStatus || "unknown"}`
+            : rawStatus
+              ? `Fax status: ${rawStatus}`
+              : "Checking fax status...",
           className: "bg-slate-50 text-slate-600 border-slate-200",
           iconColor: "text-slate-400",
           showSpinner: polling,
@@ -76,9 +83,9 @@ export function FaxStatusIndicator({ faxDetailsId }: FaxStatusIndicatorProps) {
               Poll #{pollCount} · {formatTime(elapsedSeconds)} elapsed
             </div>
           )}
-          {(details as { details?: { faxDetailsId?: string } })?.details?.faxDetailsId && (
+          {displayId && (
             <div className="text-xs opacity-70 font-mono">
-              ID: {(details as { details?: { faxDetailsId?: string } }).details?.faxDetailsId}
+              ID: {displayId}
             </div>
           )}
         </div>
