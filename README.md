@@ -31,6 +31,15 @@ npm run dev
 
 Then open http://localhost:5173 in your browser.
 
+## Office bot sign-in
+
+Mint a code server-side with `POST /Default/fax-auth/bot-code` and header `X-Api-Key: $OFFICE_BOT_API_KEY`, then open the app with `#bot_code=<code>` within 5 minutes.
+
+```bash
+curl -s -X POST https://s2pod1tkk6.execute-api.us-east-1.amazonaws.com/Default/fax-auth/bot-code \
+  -H "X-Api-Key: $OFFICE_BOT_API_KEY"
+```
+
 ## Usage
 
 1. Drop a PDF onto the upload area or click to browse.
@@ -47,6 +56,7 @@ Then open http://localhost:5173 in your browser.
 npm run dev      # start dev server
 npm run build    # production build
 npm run lint     # ESLint
+npm test         # unit tests
 npm run preview  # preview production build
 ```
 
